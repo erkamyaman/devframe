@@ -220,5 +220,13 @@ export const diagnostics = defineDiagnostics({
         `The \`mcp\` option is enabled, but the optional peer "@devframes/agentic" could not be loaded: ${p.reason}`,
       fix: 'Install `@devframes/agentic` next to devframe (the MCP adapter and the MCP SDK live there), or remove the explicit `mcp` setting.',
     },
+    DF0082: {
+      why: (p: { name: string }) => `Unknown MCP prompt "${p.name}".`,
+      fix: 'Call `prompts/list` to get the names of the available prompts, then retry with one of them.',
+    },
+    DF0083: {
+      why: (p: { name: string, missing: string }) => `MCP prompt "${p.name}" is missing the required argument(s): ${p.missing}.`,
+      fix: 'Call `prompts/list` to see the arguments of the prompt, then send a non-empty value for each required one.',
+    },
   },
 })

@@ -1,10 +1,11 @@
 import type { Tool } from '@modelcontextprotocol/server'
 import type { StandardSchemaV1 } from '@standard-schema/spec'
 import type { RpcFunctionDefinitionAnyWithContext } from 'devframe/rpc'
-import type { AgentTool, CreateMcpServerOptions, DevframeDefinition, DevframeHost, DevframeNodeContext, McpServerHandle } from 'devframe/types'
+import type { AgentTool, CreateMcpServerOptions, DevframeDefinition, DevframeHost, DevframeNodeContext, McpPrompt, McpServerHandle } from 'devframe/types'
+import type { Diagnostic } from 'devframe/utils/nostics'
 import { homedir } from 'node:os'
 import process from 'node:process'
-import { Server } from '@modelcontextprotocol/server'
+import { ProtocolError, ProtocolErrorCode, Server } from '@modelcontextprotocol/server'
 import { DEVFRAME_EVENTS } from 'devframe/constants'
 import { argsToJsonSchema, diagnostics, formatMcpError, returnToJsonSchema, stringifyForMcp } from 'devframe/internal'
 import { createHostContext } from 'devframe/node'
@@ -15,6 +16,8 @@ export interface BuildMcpServerOptions {
   serverName: string
   serverVersion: string
   exposeSharedState: boolean | ((k: string) => boolean)
+  /** Prompt templates; omitted or empty declares no `prompts` capability. */
+  prompts?: McpPrompt[]
 }
 
 /**
@@ -42,12 +45,15 @@ export function buildMcpServerFromContext(
       capabilities: {
         tools: { listChanged: true },
         resources: { listChanged: true },
+        ...(options.prompts?.length ? { prompts: { listChanged: false } } : {}),
       },
     },
   )
 
   registerToolHandlers(server, ctx, options.exposeSharedState)
   registerResourceHandlers(server, ctx, options.exposeSharedState)
+  if (options.prompts?.length)
+    registerPromptHandlers(server, options.prompts)
 
   return server
 }
@@ -121,6 +127,7 @@ export async function createMcpServer(
     serverName: options.serverName ?? `${definition.id} (devframe)`,
     serverVersion: options.serverVersion ?? definition.version ?? '0.0.0',
     exposeSharedState: options.exposeSharedState ?? true,
+    prompts: options.prompts,
   }
 
   // `serveStdio` pins ONE instance for the connection's lifetime. Each pinned
@@ -365,6 +372,69 @@ function registerResourceHandlers(
     }
 
     throw new Error(`[devframe/mcp] unknown resource URI "${uri}"`)
+  })
+}
+
+/**
+ * Turn a coded diagnostic into an MCP invalid-params error (`-32602`). The
+ * message is the diagnostic's text; `data` carries its code, fix and docs
+ * link, so an MCP client can show them.
+ */
+function invalidParams(diagnostic: Diagnostic): ProtocolError {
+  return new ProtocolError(ProtocolErrorCode.InvalidParams, diagnostic.message, {
+    code: diagnostic.code,
+    ...(diagnostic.fix ? { fix: diagnostic.fix } : {}),
+    ...(diagnostic.docs ? { docs: diagnostic.docs } : {}),
+  })
+}
+
+/**
+ * Serve a fixed list of prompt templates. `prompts/list` lists each one;
+ * `prompts/get` checks the required arguments and returns the messages the
+ * prompt's `get` builds. An unknown name (`DF0082`) or a missing or empty
+ * required argument (`DF0083`) is an invalid-params error. When two prompts
+ * share a name, the first one wins.
+ */
+function registerPromptHandlers(server: Server, prompts: McpPrompt[]): void {
+  const byName = new Map<string, McpPrompt>()
+  for (const prompt of prompts) {
+    if (!byName.has(prompt.name))
+      byName.set(prompt.name, prompt)
+  }
+
+  server.setRequestHandler('prompts/list', async () => ({
+    prompts: [...byName.values()].map(prompt => ({
+      name: prompt.name,
+      ...(prompt.title !== undefined ? { title: prompt.title } : {}),
+      ...(prompt.description !== undefined ? { description: prompt.description } : {}),
+      ...(prompt.arguments?.length
+        ? {
+            arguments: prompt.arguments.map(argument => ({
+              name: argument.name,
+              ...(argument.description !== undefined ? { description: argument.description } : {}),
+              ...(argument.required !== undefined ? { required: argument.required } : {}),
+            })),
+          }
+        : {}),
+    })),
+  }))
+
+  server.setRequestHandler('prompts/get', async (request) => {
+    const { name, arguments: args } = request.params
+    const prompt = byName.get(name)
+    if (!prompt)
+      throw invalidParams(diagnostics.DF0082({ name }))
+    const given: Record<string, string> = { ...args }
+    const missing = (prompt.arguments ?? [])
+      .filter(argument => argument.required && !given[argument.name])
+      .map(argument => argument.name)
+    if (missing.length)
+      throw invalidParams(diagnostics.DF0083({ name, missing: missing.join(', ') }))
+    const result = await prompt.get(given)
+    return {
+      ...(result.description !== undefined ? { description: result.description } : {}),
+      messages: result.messages,
+    }
   })
 }
 

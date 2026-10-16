@@ -9,6 +9,10 @@ export type {
   CreateMcpServerOptions,
   McpConnectionInfo,
   McpFetchHandler,
+  McpPrompt,
+  McpPromptArgument,
+  McpPromptMessage,
+  McpPromptResult,
   McpServerHandle,
 } from '../types/mcp'
 export { createMcpFetchHandler, createMcpServer, mountMcpHttp } from '@devframes/agentic/mcp'

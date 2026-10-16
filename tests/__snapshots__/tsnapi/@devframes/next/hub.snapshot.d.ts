@@ -20,6 +20,7 @@ export interface DevframeNextHostMcpOptions {
   serverName?: string;
   serverVersion?: string;
   exposeSharedState?: boolean | ((_: string) => boolean);
+  prompts?: McpPrompt[];
   allowedOrigins?: readonly string[] | false;
 }
 export interface NextDevframeHubHandle {

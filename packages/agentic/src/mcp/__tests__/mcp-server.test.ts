@@ -1,4 +1,4 @@
-import type { DevframeHost } from 'devframe/types'
+import type { DevframeHost, McpPrompt } from 'devframe/types'
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client'
 import { createHostContext } from 'devframe/node'
 import * as v from 'valibot'
@@ -13,13 +13,14 @@ function nullHost(): DevframeHost {
   }
 }
 
-async function bootPair(exposeSharedState: boolean | ((key: string) => boolean) = true) {
+async function bootPair(exposeSharedState: boolean | ((key: string) => boolean) = true, prompts?: McpPrompt[]) {
   const ctx = await createHostContext({ cwd: process.cwd(), mode: 'dev', host: nullHost() })
 
   const server = buildMcpServerFromContext(ctx, {
     serverName: 'test',
     serverVersion: '0.0.0-test',
     exposeSharedState,
+    prompts,
   })
 
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
@@ -435,5 +436,136 @@ describe('mcp adapter (in-memory)', () => {
     finally {
       await cleanup()
     }
+  })
+
+  describe('prompts', () => {
+    const review: McpPrompt = {
+      name: 'review',
+      title: 'Review a file',
+      description: 'Ask for a review of one file.',
+      arguments: [
+        { name: 'file', description: 'Path of the file.', required: true },
+        { name: 'focus', description: 'What to look at.' },
+      ],
+      get: args => ({
+        description: `Review ${args.file}`,
+        messages: [{ role: 'user', content: { type: 'text', text: `Review ${args.file}${args.focus ? ` for ${args.focus}` : ''}.` } }],
+      }),
+    }
+
+    it('declares no prompts capability and no handler when prompts are omitted or empty', async () => {
+      for (const prompts of [undefined, []]) {
+        const { client, cleanup } = await bootPair(true, prompts)
+        try {
+          expect(client.getServerCapabilities()?.prompts).toBeUndefined()
+          // The client answers listPrompts() itself when the capability is
+          // absent, so send the raw request to check that no handler exists.
+          await expect(client.request({ method: 'prompts/list', params: {} })).rejects.toMatchObject({ code: -32601 })
+        }
+        finally {
+          await cleanup()
+        }
+      }
+    })
+
+    it('declares the prompts capability and lists the prompts', async () => {
+      const { client, cleanup } = await bootPair(true, [review, { name: 'plain', get: () => ({ messages: [] }) }])
+      try {
+        expect(client.getServerCapabilities()?.prompts).toEqual({ listChanged: false })
+        const { prompts } = await client.listPrompts()
+        expect(prompts).toEqual([
+          {
+            name: 'review',
+            title: 'Review a file',
+            description: 'Ask for a review of one file.',
+            arguments: [
+              { name: 'file', description: 'Path of the file.', required: true },
+              { name: 'focus', description: 'What to look at.' },
+            ],
+          },
+          { name: 'plain' },
+        ])
+      }
+      finally {
+        await cleanup()
+      }
+    })
+
+    it('returns the messages that get builds from the arguments', async () => {
+      const { client, cleanup } = await bootPair(true, [review])
+      try {
+        const result = await client.getPrompt({ name: 'review', arguments: { file: 'a.ts', focus: 'errors' } })
+        expect(result.description).toBe('Review a.ts')
+        expect(result.messages).toEqual([
+          { role: 'user', content: { type: 'text', text: 'Review a.ts for errors.' } },
+        ])
+      }
+      finally {
+        await cleanup()
+      }
+    })
+
+    it('awaits an async get', async () => {
+      const slow: McpPrompt = {
+        name: 'slow',
+        get: async () => {
+          await new Promise(resolve => setTimeout(resolve, 5))
+          return { messages: [{ role: 'assistant', content: { type: 'text', text: 'done' } }] }
+        },
+      }
+      const { client, cleanup } = await bootPair(true, [slow])
+      try {
+        const result = await client.getPrompt({ name: 'slow' })
+        expect(result.description).toBeUndefined()
+        expect(result.messages).toEqual([{ role: 'assistant', content: { type: 'text', text: 'done' } }])
+      }
+      finally {
+        await cleanup()
+      }
+    })
+
+    it('keeps the first prompt when two share a name', async () => {
+      const second: McpPrompt = { name: 'review', description: 'Second.', get: () => ({ messages: [] }) }
+      const { client, cleanup } = await bootPair(true, [review, second])
+      try {
+        const { prompts } = await client.listPrompts()
+        expect(prompts.map(p => p.description)).toEqual(['Ask for a review of one file.'])
+        const result = await client.getPrompt({ name: 'review', arguments: { file: 'a.ts' } })
+        expect(result.description).toBe('Review a.ts')
+      }
+      finally {
+        await cleanup()
+      }
+    })
+
+    it('answers an unknown prompt with invalid params (DF0082)', async () => {
+      const { client, cleanup } = await bootPair(true, [review])
+      try {
+        await expect(client.getPrompt({ name: 'nope' })).rejects.toMatchObject({
+          code: -32602,
+          message: expect.stringContaining('Unknown MCP prompt "nope"'),
+          data: expect.objectContaining({ code: 'DF0082' }),
+        })
+      }
+      finally {
+        await cleanup()
+      }
+    })
+
+    it('answers a missing or empty required argument with invalid params (DF0083)', async () => {
+      const { client, cleanup } = await bootPair(true, [review])
+      try {
+        for (const args of [undefined, { focus: 'errors' }, { file: '' }] as Array<Record<string, string> | undefined>) {
+          await expect(client.getPrompt({ name: 'review', arguments: args })).rejects.toMatchObject({
+            code: -32602,
+            message: expect.stringContaining('MCP prompt "review" is missing the required argument(s): file'),
+            data: expect.objectContaining({ code: 'DF0083' }),
+          })
+        }
+      }
+      finally {
+        await cleanup()
+      }
+    })
   })
 })

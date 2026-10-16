@@ -371,6 +371,19 @@ export declare const diagnostics: import("nostics").Diagnostics<{
     }) => string;
     readonly fix: "Install `@devframes/agentic` next to devframe (the MCP adapter and the MCP SDK live there), or remove the explicit `mcp` setting.";
   };
+  readonly DF0082: {
+    readonly why: (p: {
+      name: string;
+    }) => string;
+    readonly fix: "Call `prompts/list` to get the names of the available prompts, then retry with one of them.";
+  };
+  readonly DF0083: {
+    readonly why: (p: {
+      name: string;
+      missing: string;
+    }) => string;
+    readonly fix: "Call `prompts/list` to see the arguments of the prompt, then send a non-empty value for each required one.";
+  };
 }, readonly [(d: import("nostics").Diagnostic, { method }?: {
   method?: "log" | "warn" | "error";
 }) => void], never>;

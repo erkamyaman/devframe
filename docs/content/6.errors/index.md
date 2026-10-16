@@ -86,6 +86,8 @@ Emitted by `devframe`: the framework-neutral host, RPC, streaming, assets, servi
 | [DF0077](/errors/DF0077) | error | In-Page Channel Function Not Registered |
 | [DF0078](/errors/DF0078) | warn | Agent Surface Without @devframes/agentic |
 | [DF0079](/errors/DF0079) | error | MCP Enabled Without @devframes/agentic |
+| [DF0082](/errors/DF0082) | error | Unknown MCP Prompt |
+| [DF0083](/errors/DF0083) | error | MCP Prompt Argument Missing |
 
 ## Hub: context & lifecycle (DF80xx)
 

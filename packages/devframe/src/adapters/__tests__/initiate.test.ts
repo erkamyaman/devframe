@@ -360,6 +360,44 @@ describe('adapters/handler', () => {
     }
   })
 
+  it('mcp: prompts reach the route through prompts/list and prompts/get', async () => {
+    const wsPort = await getPort({ port: 18147, host: '127.0.0.1' })
+    const devtools = initDevframe(defineTestDef('handler-mcp-prompts'), {
+      base: '/__handler-mcp-prompts/',
+      auth: false,
+      mcp: {
+        prompts: [{
+          name: 'list-pages',
+          description: 'List the pages.',
+          get: () => ({ messages: [{ role: 'user', content: { type: 'text', text: 'List every page.' } }] }),
+        }],
+      },
+      ws: { port: wsPort },
+    })
+
+    const call = (method: string, params?: Record<string, unknown>) => devtools.handler(new Request('http://localhost:3000/__handler-mcp-prompts/__mcp', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'accept': 'application/json, text/event-stream',
+        'origin': 'http://localhost:3000',
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+    })).then(res => res.text())
+
+    try {
+      await devtools.ready
+      expect(await call('prompts/list')).toContain('"name":"list-pages"')
+      expect(await call('prompts/get', { name: 'list-pages' })).toContain('List every page.')
+      const unknown = await call('prompts/get', { name: 'nope' })
+      expect(unknown).toContain('-32602')
+      expect(unknown).toContain('DF0082')
+    }
+    finally {
+      await devtools.close()
+    }
+  })
+
   // The `'auto'` default: an omitted `mcp` mounts the route exactly when
   // `setup()` left a non-empty agent surface.
   function defineAgentTestDef(id: string) {

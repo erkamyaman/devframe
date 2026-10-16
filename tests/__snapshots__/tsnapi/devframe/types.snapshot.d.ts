@@ -70,6 +70,10 @@ export { EventUnsubscribe }
 export { McpAuthorization }
 export { McpConnectionInfo }
 export { McpFetchHandler }
+export { McpPrompt }
+export { McpPromptArgument }
+export { McpPromptMessage }
+export { McpPromptResult }
 export { McpRouteOptions }
 export { McpServerHandle }
 export { McpSetting }

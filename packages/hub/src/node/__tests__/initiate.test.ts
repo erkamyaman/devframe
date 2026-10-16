@@ -44,6 +44,22 @@ function connectWsClient(url: string) {
   )
 }
 
+/** POST one JSON-RPC request to the hub's aggregate MCP route and return the raw body. */
+async function callMcp(hub: ReturnType<typeof initHub>, method: string, params?: Record<string, unknown>): Promise<string> {
+  const origin = 'http://localhost:3000'
+  const res = await hub.handler(new Request(`${origin}/__devframes/__mcp`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'accept': 'application/json, text/event-stream',
+      origin,
+    },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+  }))
+  expect(res.status).toBe(200)
+  return await res.text()
+}
+
 describe('initHub', () => {
   it('publishes an empty renderer manifest when no renderers are registered', async () => {
     expect.assertions(2)
@@ -325,8 +341,6 @@ describe('initHub', () => {
   })
 
   describe('aggregate MCP shared-state exposure', () => {
-    const origin = 'http://localhost:3000'
-
     function makeStateFrame(): DevframeDefinition {
       const frame = makeFrame('state')
       return {
@@ -337,20 +351,6 @@ describe('initHub', () => {
           await ctx.rpc.sharedState.get('hidden:key', { initialValue: { n: 2 } })
         },
       }
-    }
-
-    async function callMcp(hub: ReturnType<typeof initHub>, method: string, params?: Record<string, unknown>): Promise<string> {
-      const res = await hub.handler(new Request(`${origin}/__devframes/__mcp`, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'accept': 'application/json, text/event-stream',
-          origin,
-        },
-        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
-      }))
-      expect(res.status).toBe(200)
-      return await res.text()
     }
 
     it('exposes every shared state by default', async () => {
@@ -416,6 +416,56 @@ describe('initHub', () => {
         expect(tools).not.toContain('devframe_state_read')
         const resources = await callMcp(hub, 'resources/list')
         expect(resources).not.toContain('devframe://state/')
+      }
+      finally {
+        await hub.close()
+      }
+    })
+  })
+
+  describe('aggregate MCP prompts', () => {
+    const initializeParams = { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '0.0.0' } }
+
+    it('declares no prompts capability by default', async () => {
+      const wsPort = await getPort({ port: 18241, host: '127.0.0.1' })
+      const hub = initHub({ base: DEVFRAMES_HUB_BASE, auth: false, host: '127.0.0.1', ws: { port: wsPort }, mcp: true, devframes: [makeFrame('alpha')] })
+
+      try {
+        await hub.ready
+        const raw = await callMcp(hub, 'initialize', initializeParams)
+        expect(raw).toContain('"capabilities"')
+        expect(raw).not.toContain('"prompts"')
+      }
+      finally {
+        await hub.close()
+      }
+    })
+
+    it('serves mcp.prompts through prompts/list and prompts/get', async () => {
+      const wsPort = await getPort({ port: 18242, host: '127.0.0.1' })
+      const hub = initHub({
+        base: DEVFRAMES_HUB_BASE,
+        auth: false,
+        host: '127.0.0.1',
+        ws: { port: wsPort },
+        mcp: {
+          prompts: [{
+            name: 'use-alpha',
+            arguments: [{ name: 'topic', required: true }],
+            get: args => ({ messages: [{ role: 'user', content: { type: 'text', text: `Call alpha-tool about ${args.topic}.` } }] }),
+          }],
+        },
+        devframes: [makeFrame('alpha')],
+      })
+
+      try {
+        await hub.ready
+        expect(await callMcp(hub, 'initialize', initializeParams)).toContain('"prompts":{"listChanged":false}')
+        expect(await callMcp(hub, 'prompts/list')).toContain('"name":"use-alpha"')
+        expect(await callMcp(hub, 'prompts/get', { name: 'use-alpha', arguments: { topic: 'docks' } })).toContain('Call alpha-tool about docks.')
+        const missing = await callMcp(hub, 'prompts/get', { name: 'use-alpha' })
+        expect(missing).toContain('-32602')
+        expect(missing).toContain('DF0083')
       }
       finally {
         await hub.close()

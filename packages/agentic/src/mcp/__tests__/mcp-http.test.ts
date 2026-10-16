@@ -95,6 +95,46 @@ describe('mcp adapter (streamable http route)', () => {
     }
   })
 
+  it('serves mcp.prompts through prompts/list and prompts/get', async () => {
+    const started = await boot({
+      prompts: [{
+        name: 'greet-user',
+        description: 'Greet someone.',
+        arguments: [{ name: 'who', required: true }],
+        get: args => ({ messages: [{ role: 'user', content: { type: 'text', text: `Call greet with ${args.who}.` } }] }),
+      }],
+    })
+    const client = new Client({ name: 'test-client', version: '0.0.0' })
+    try {
+      await client.connect(originTransport(started))
+      expect(client.getServerCapabilities()?.prompts).toEqual({ listChanged: false })
+
+      const { prompts } = await client.listPrompts()
+      expect(prompts).toEqual([{ name: 'greet-user', description: 'Greet someone.', arguments: [{ name: 'who', required: true }] }])
+
+      const result = await client.getPrompt({ name: 'greet-user', arguments: { who: 'devframe' } })
+      expect(result.messages).toEqual([{ role: 'user', content: { type: 'text', text: 'Call greet with devframe.' } }])
+
+      await expect(client.getPrompt({ name: 'nope' })).rejects.toMatchObject({ code: -32602 })
+      await expect(client.getPrompt({ name: 'greet-user' })).rejects.toMatchObject({ code: -32602 })
+    }
+    finally {
+      await client.close()
+    }
+  })
+
+  it('declares no prompts capability without mcp.prompts', async () => {
+    const started = await boot()
+    const client = new Client({ name: 'test-client', version: '0.0.0' })
+    try {
+      await client.connect(originTransport(started))
+      expect(client.getServerCapabilities()?.prompts).toBeUndefined()
+    }
+    finally {
+      await client.close()
+    }
+  })
+
   it('answers a bare GET with 405 (no session lifecycle)', async () => {
     const started = await boot()
     // Stateless serving has no session stream to open, so the SDK answers a

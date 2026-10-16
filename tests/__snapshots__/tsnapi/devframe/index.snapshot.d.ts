@@ -91,12 +91,14 @@ export interface CreateMcpFetchHandlerOptions {
   serverName: string;
   serverVersion: string;
   exposeSharedState: boolean | ((_: string) => boolean);
+  prompts?: McpPrompt[];
   authorization?: McpAuthorization;
   allowedOrigins?: readonly string[] | false;
 }
 export interface CreateMcpServerOptions {
   transport?: 'stdio';
   exposeSharedState?: boolean | ((_: string) => boolean);
+  prompts?: McpPrompt[];
   serverName?: string;
   serverVersion?: string;
   onReady?: (_: {
@@ -442,11 +444,35 @@ export interface McpFetchHandler {
   fetch: (_: Request, _?: McpConnectionInfo) => Promise<Response>;
   dispose: () => Promise<void>;
 }
+export interface McpPrompt {
+  name: string;
+  title?: string;
+  description?: string;
+  arguments?: McpPromptArgument[];
+  get: (_: Record<string, string>) => McpPromptResult | Promise<McpPromptResult>;
+}
+export interface McpPromptArgument {
+  name: string;
+  description?: string;
+  required?: boolean;
+}
+export interface McpPromptMessage {
+  role: 'user' | 'assistant';
+  content: {
+    type: 'text';
+    text: string;
+  };
+}
+export interface McpPromptResult {
+  description?: string;
+  messages: McpPromptMessage[];
+}
 export interface McpRouteOptions {
   path?: string;
   authorization?: McpAuthorization;
   allowedOrigins?: readonly string[] | false;
   exposeSharedState?: boolean | ((_: string) => boolean);
+  prompts?: McpPrompt[];
 }
 export interface McpServerHandle {
   stop: () => Promise<void>;

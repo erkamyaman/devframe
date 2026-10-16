@@ -2,6 +2,7 @@ import type { AgenticMcpModule } from '../node/agentic'
 import type { DevframeAgentHost } from '../types/agent'
 import type { ConnectionMeta } from '../types/context'
 import type { DevframeDefinition, DevframeDeploymentKind, McpAuthorization, McpSetting } from '../types/devframe'
+import type { McpPrompt } from '../types/mcp'
 import { cleanDoubleSlashes, withLeadingSlash, withoutLeadingSlash, withTrailingSlash } from 'devframe/utils/url'
 import { getPort } from 'get-port-please'
 import { DEVFRAME_MCP_ROUTE } from '../constants'
@@ -70,6 +71,8 @@ export interface ResolvedMcpConfig {
   allowedOrigins?: readonly string[] | false
   /** Shared-state exposure from the route options; omitted means every key. */
   exposeSharedState?: boolean | ((key: string) => boolean)
+  /** Prompt templates from the route options; omitted means none. */
+  prompts?: McpPrompt[]
   /** The resolved identity policy: a bearer token, callback, or `false`. */
   authorization: McpAuthorization
 }
@@ -99,6 +102,7 @@ export function resolveMcpConfig(mcp: McpSetting | undefined): ResolvedMcpConfig
     ...(mcp.path !== undefined ? { path: mcp.path } : {}),
     ...(mcp.allowedOrigins !== undefined ? { allowedOrigins: mcp.allowedOrigins } : {}),
     ...(mcp.exposeSharedState !== undefined ? { exposeSharedState: mcp.exposeSharedState } : {}),
+    ...(mcp.prompts !== undefined ? { prompts: mcp.prompts } : {}),
     authorization,
   }
 }

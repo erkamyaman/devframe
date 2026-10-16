@@ -2,6 +2,7 @@ import type { CAC } from 'cac'
 import type { CliFlagsSchema } from '../adapters/flags'
 import type { DevframeAuthHandler } from '../node/auth/handler'
 import type { DevframeNodeContext } from './context'
+import type { McpPrompt } from './mcp'
 import type { StaticAssetsSource } from './remote-assets'
 import type { DevframeServiceInput } from './services'
 
@@ -174,6 +175,13 @@ export interface McpRouteOptions {
    * The states themselves stay available to the UI over RPC.
    */
   exposeSharedState?: boolean | ((key: string) => boolean)
+  /**
+   * Prompt templates the route serves through MCP `prompts/list` and
+   * `prompts/get`. An MCP client often offers each one to the user as a
+   * slash command. When two prompts share a name, the first one wins.
+   * Omitted or empty declares no `prompts` capability.
+   */
+  prompts?: McpPrompt[]
 }
 
 export interface DevframeCliOptions {

@@ -10,6 +10,49 @@ import type { McpAuthorization } from './devframe'
  * `devframe/internal`) instead: `devframe/types` must stay lib-neutral, and
  * h3's declarations are not.
  */
+
+/** One argument of an {@link McpPrompt}, listed in `prompts/list`. */
+export interface McpPromptArgument {
+  /** Argument name, the key in the `arguments` of `prompts/get`. */
+  name: string
+  /** What the argument is for, shown to the user by the MCP client. */
+  description?: string
+  /**
+   * When `true`, `prompts/get` answers an invalid-params error (`DF0083`)
+   * if the argument is missing or empty.
+   */
+  required?: boolean
+}
+
+/** One message in the answer of `prompts/get`. */
+export interface McpPromptMessage {
+  role: 'user' | 'assistant'
+  content: { type: 'text', text: string }
+}
+
+/** What an {@link McpPrompt} returns from `get`, sent as the `prompts/get` result. */
+export interface McpPromptResult {
+  description?: string
+  messages: McpPromptMessage[]
+}
+
+/**
+ * A prompt template the MCP server lists in `prompts/list` and fills in
+ * `prompts/get`. An MCP client often offers it to the user as a slash
+ * command.
+ */
+export interface McpPrompt {
+  /** Unique name of the prompt. When two prompts share a name, the first one wins. */
+  name: string
+  /** Human-readable name for display. */
+  title?: string
+  description?: string
+  /** The arguments the prompt takes. */
+  arguments?: McpPromptArgument[]
+  /** Build the messages from the arguments the MCP client sent. */
+  get: (args: Record<string, string>) => McpPromptResult | Promise<McpPromptResult>
+}
+
 export interface CreateMcpServerOptions {
   /**
    * Transport to use. `createMcpServer` itself runs `'stdio'` (a standalone
@@ -25,6 +68,11 @@ export interface CreateMcpServerOptions {
    * - `(key) => boolean`: filter
    */
   exposeSharedState?: boolean | ((key: string) => boolean)
+  /**
+   * Prompt templates served through `prompts/list` and `prompts/get`.
+   * Omitted or empty declares no `prompts` capability.
+   */
+  prompts?: McpPrompt[]
   /** Override the name reported in the MCP handshake. */
   serverName?: string
   /** Override the version reported in the MCP handshake. Defaults to `definition.version ?? '0.0.0'`. */
@@ -44,6 +92,8 @@ export interface CreateMcpFetchHandlerOptions {
   serverVersion: string
   /** Expose shared-state keys as MCP resources; see {@link CreateMcpServerOptions.exposeSharedState}. */
   exposeSharedState: boolean | ((key: string) => boolean)
+  /** Prompt templates; see {@link CreateMcpServerOptions.prompts}. */
+  prompts?: McpPrompt[]
   /**
    * Optional identity check, layered on top of the origin gate and checked
    * **after** it: a bearer token string (matched in constant time against
