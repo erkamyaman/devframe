@@ -179,6 +179,7 @@ const moreButtonActive = computed(() => selectedInOverflow.value || isOverflowPa
         v-for="member of members"
         :key="member.id"
         :aria-label="member.title"
+        :aria-current="selectedId === member.id ? 'page' : undefined"
         class="relative flex items-center justify-center w-8 h-8 rounded-lg transition"
         :class="selectedId === member.id ? 'text-primary bg-active' : 'op60 hover:op100 hover:bg-active'"
         @pointerenter="showTooltip($event, member.title)"

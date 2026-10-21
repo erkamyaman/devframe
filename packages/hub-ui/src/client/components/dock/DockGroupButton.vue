@@ -132,6 +132,7 @@ function onClick() {
       :dock="group"
       :is-vertical="isVertical"
       :is-selected="isActive || isPanelVisible"
+      :is-current="isActive"
       :is-dimmed="dimInactive && selected ? !isActive : false"
       :badge="group.badge"
       :badge-variant="group.badgeVariant"

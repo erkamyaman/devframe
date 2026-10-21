@@ -13,6 +13,11 @@ const props = withDefaults(
     dock: DevframeDockEntryBase
     isAction?: boolean
     isSelected?: boolean
+    /**
+     * The dock is the one shown now. Unlike `isSelected`, which is also on
+     * while a group popover is open, this marks the button `aria-current`.
+     */
+    isCurrent?: boolean
     isDimmed?: boolean
     isVertical?: boolean
     badge?: string
@@ -98,6 +103,7 @@ useEventListener('pointerdown', () => {
     <button
       ref="button"
       :aria-label="dock.title"
+      :aria-current="isCurrent ? 'page' : undefined"
       :class="[
         isVertical ? 'rotate-270' : '',
         isDimmed ? 'op50 saturate-0' : '',
